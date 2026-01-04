@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-from .config import AppConfig, Mode
+from .config import AppConfig
 from .profanity_detector import ProfanitySpan
 
 logger = logging.getLogger(__name__)
@@ -272,8 +272,8 @@ def apply_audio_filters_and_mux(
     """
     Apply mute or bleep filters to the audio of input_video and write output_video.
 
-    - In mute mode, a simple -af volume filter is used.
-    - In bleep mode, a synthetic tone is overlaid via -filter_complex.
+    - When spans are present, filtering is applied only to 0:a:0 via -filter_complex.
+    - Other audio streams are preserved via stream copy.
     """
     input_video = input_video.expanduser().resolve()
     output_video = output_video.expanduser().resolve()
