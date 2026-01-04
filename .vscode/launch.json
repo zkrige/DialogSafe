@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug real_short_clip_round_trip",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "-m",
+        "manual and integration",
+        "-k",
+        "real_short_clip_round_trip",
+        "-vv"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        // Optional: override movie source; otherwise MOVIE_SOURCE_DEFAULT is used
+        // "MOVIE_SOURCE": "/full/path/to/your/movie.mkv"
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Python / virtualenv
+.venv/
+__pycache__/
+*.py[cod]
+
+# Pytest
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Output / generated artifacts
+out/
+
+# Media outputs
+*.mp4
+*.mkv
+
+# Local environment overrides (do not commit secrets)
+.env
+*.env
+!.env.example

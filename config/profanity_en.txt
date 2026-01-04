@@ -1,0 +1,94 @@
+# English profanity and blasphemy word list
+# One word or phrase per line, case-insensitive.
+# Lines starting with '#' are comments and ignored.
+
+# Strong profanity (F-word variants)
+fuck
+fucking
+fucked
+fucker
+fuckers
+motherfucker
+motherfuckers
+motherfucking
+fuckface
+fuckhead
+clusterfuck
+what the fuck
+holy fuck
+fuck off
+fuck you
+go fuck yourself
+
+# General swear words
+shit
+shits
+shitty
+bullshit
+bull shit
+holy shit
+goddamn
+god damn
+goddamned
+god-damned
+
+# Sexual / anatomical terms commonly used as profanity
+ass
+asses
+asshole
+assholes
+arse
+arsehole
+cock
+cocks
+dick
+dicks
+dickhead
+dickheads
+dildo
+wanker
+wankers
+prick
+pricks
+pussy
+pussies
+slut
+sluts
+whore
+whores
+cocksucker
+cocksuckers
+suck my dick
+suck my cock
+suck it
+jack off
+jackoff
+jerked off
+handjob
+hand job
+blowjob
+blow job
+tits
+tit
+titties
+boob
+boobs
+
+# Blasphemy / religious exclamations
+jesus christ
+jesus fucking christ
+jesus f christ
+christ almighty
+for christs sake
+for christ's sake
+oh my god
+oh my gosh
+omg
+my god
+good god
+god almighty
+goddammit
+god damn it
+god fucking damn
+god forsaken
+godawful
