@@ -135,7 +135,7 @@ This runs unit tests in `tests/test_core.py` covering chunking, transcription pa
 
 ### Prometheus (sample.mkv)
 
-This benchmark was captured by running the CLI with `--verbose` and using the timestamps in the logs.
+This benchmark was captured on macOS using `/usr/bin/time -lp` around the CLI.
 
 #### Hardware / software
 
@@ -179,19 +179,20 @@ Input file: `~/Downloads/sample.mkv`
 #### Results
 
 - Detected language: `en`
-- Profanity hits: 17 raw hits
-- Profanity spans: 17 merged spans (max gap: 500 ms)
+- Profanity hits: 25 raw hits
+- Profanity spans: 24 merged spans (max gap: 500 ms)
 
-Timing summary (from log timestamps):
+Timing summary:
 
-- Transcription: 3m 32s
-- Profanity detect + emit logs/subtitles: < 1s
-- FFmpeg re-mux (mute filter + AAC): 3m 10s
-- End-to-end (observed window): 6m 48s
+- End-to-end (wall time): 4m 45s (`real 285.07`)
+- CPU time: `user 579.17`, `sys 163.71`
+- Peak RSS: ~1.43 GB (`maximum resident set size 1434320896`)
+- FFmpeg re-mux (mute filter): ~46s (from log timestamps)
 
 Notes:
 
 - With the local Whisper backend, `model.transcribe(...)` is serialized per model name for stability, so additional transcription threads may spend time waiting on a per-model lock.
+- When censoring is applied, the tool re-encodes only the primary audio track to match the input codec/bitrate (for this file: E-AC-3 5.1 @ 640 kbps) and stream-copies other audio tracks.
 
 ## Notes
 
