@@ -29,6 +29,7 @@ def _base_args(*, input_path: str, output_path: str) -> Namespace:
         verbose=None,
         debug_dump_audio=None,
         whisper_model=None,
+        force=None,
     )
 
 
@@ -50,6 +51,7 @@ def test_env_values_used_when_cli_omits_them(tmp_path, monkeypatch):
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("WHISPER_BACKEND", "openai_api")
     monkeypatch.setenv("WHISPER_MODEL", "small")
+    monkeypatch.setenv("FORCE", "true")
 
     config = load_config_from_args(args)
 
@@ -65,6 +67,7 @@ def test_env_values_used_when_cli_omits_them(tmp_path, monkeypatch):
     assert config.output_dir == (tmp_path / "logs").resolve()
     assert config.whisper_backend == "openai_api"
     assert config.whisper_model == "small"
+    assert config.force is True
 
 
 @pytest.mark.parametrize("raw", ["1", "0", "yes", "no", "on", "off", "t", "f"])

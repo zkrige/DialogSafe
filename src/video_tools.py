@@ -5,12 +5,15 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .config import AppConfig
 from .profanity_detector import ProfanitySpan
 
 logger = logging.getLogger(__name__)
+
+
+CLEAN_TRACK_TITLE = "Clean"
 
 
 # In mute mode, add a small tail to ensure the trailing consonant/air of
@@ -160,6 +163,130 @@ def probe_primary_audio_codec_and_bitrate(input_video: Path) -> Tuple[Optional[s
     return codec_name, bit_rate
 
 
+def probe_primary_audio_codec_bitrate_and_count(
+    input_video: Path,
+) -> Tuple[Optional[str], Optional[int], int]:
+    """Return (codec_name, bit_rate, audio_stream_count) for input.
+
+    - codec_name/bit_rate describe the primary audio stream (0:a:0).
+    - audio_stream_count counts all audio streams in the input.
+
+    Best-effort: returns (None, None, 0) on ffprobe failures.
+    """
+
+    input_video = input_video.expanduser().resolve()
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=codec_name,bit_rate",
+        "-of",
+        "json",
+        str(input_video),
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError:
+        logger.warning("ffprobe not found on PATH; cannot probe audio streams")
+        return None, None, 0
+
+    if result.returncode != 0:
+        logger.warning("ffprobe failed (code=%s): %s", result.returncode, result.stderr)
+        return None, None, 0
+
+    try:
+        data: Dict[str, Any] = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        logger.warning("ffprobe returned non-JSON output")
+        return None, None, 0
+
+    streams = data.get("streams") or []
+    audio_stream_count = len(streams)
+    if not streams:
+        return None, None, 0
+
+    stream0 = streams[0] or {}
+    codec_name_raw = stream0.get("codec_name")
+    codec_name = str(codec_name_raw).strip().lower() if codec_name_raw else None
+
+    bit_rate_raw = stream0.get("bit_rate")
+    bit_rate: Optional[int]
+    if bit_rate_raw is None:
+        bit_rate = None
+    else:
+        try:
+            bit_rate = int(str(bit_rate_raw).strip())
+        except ValueError:
+            bit_rate = None
+
+    return codec_name, bit_rate, audio_stream_count
+
+
+def input_has_clean_track_marker(input_video: Path, *, marker_title: str = CLEAN_TRACK_TITLE) -> bool:
+    """Return True if the input appears to already contain a "Clean" audio track.
+
+    Marker strategy:
+    - We tag the generated clean audio stream with `title=Clean`.
+    - This helper checks audio stream tags for that title.
+
+    Best-effort: returns False on ffprobe failures.
+    """
+
+    input_video = input_video.expanduser().resolve()
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream_tags=title",
+        "-of",
+        "json",
+        str(input_video),
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError:
+        logger.warning("ffprobe not found on PATH; cannot check clean-track marker")
+        return False
+
+    if result.returncode != 0:
+        logger.warning("ffprobe failed while checking clean marker (code=%s): %s", result.returncode, result.stderr)
+        return False
+
+    try:
+        data: Dict[str, Any] = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        logger.warning("ffprobe returned non-JSON output while checking clean marker")
+        return False
+
+    streams = data.get("streams") or []
+    wanted = marker_title.strip().lower()
+    for stream in streams:
+        tags = (stream or {}).get("tags") or {}
+        title_raw = tags.get("title")
+        title = str(title_raw).strip().lower() if title_raw else ""
+        if title == wanted:
+            return True
+    return False
+
+
 def _encoder_for_codec_name(codec_name: Optional[str]) -> str:
     """Return an ffmpeg audio encoder name for a given ffprobe codec name."""
 
@@ -187,6 +314,7 @@ def _build_ffmpeg_censor_and_mux_cmd(
     config: AppConfig,
     primary_audio_codec: Optional[str],
     primary_audio_bit_rate: Optional[int],
+    input_audio_stream_count: int,
 ) -> List[str]:
     """Build the ffmpeg command used by apply_audio_filters_and_mux()."""
 
@@ -233,6 +361,10 @@ def _build_ffmpeg_censor_and_mux_cmd(
 
     encoder = _encoder_for_codec_name(primary_audio_codec)
 
+    clean_idx = max(0, int(input_audio_stream_count))
+
+    preserve_all_streams = output_video.suffix.lower() == ".mkv"
+
     cmd: List[str] = [
         "ffmpeg",
         "-y",
@@ -240,25 +372,35 @@ def _build_ffmpeg_censor_and_mux_cmd(
         str(input_video),
         "-filter_complex",
         filter_complex,
-        "-map",
-        "0:v:0",
-        "-map",
-        "[aout]",
-        "-map",
-        "0:a",
-        "-map",
-        "-0:a:0",
-        "-c:v",
-        "copy",
-        "-c:a",
-        "copy",
-        "-c:a:0",
-        encoder,
     ]
 
-    if primary_audio_bit_rate and primary_audio_bit_rate > 0:
-        cmd.extend(["-b:a:0", str(primary_audio_bit_rate)])
+    if preserve_all_streams:
+        # Preserve subtitles/attachments/chapters for MKV outputs.
+        cmd.extend(["-map", "0"])
+    else:
+        # Safer default for non-MKV outputs: preserve primary video + all audio.
+        # (Subtitles/attachments may not be compatible with MP4 and can cause mux failures.)
+        cmd.extend(["-map", "0:v:0", "-map", "0:a"])
 
+    # Append the clean/censored audio as an additional track.
+    cmd.extend(["-map", "[aout]"])
+
+    # Preserve global metadata and chapters where supported.
+    cmd.extend(["-map_metadata", "0", "-map_chapters", "0"])
+
+    # Copy everything by default, but re-encode only the appended clean audio.
+    cmd.extend(["-c", "copy", f"-c:a:{clean_idx}", encoder])
+
+    if primary_audio_bit_rate and primary_audio_bit_rate > 0:
+        cmd.extend([f"-b:a:{clean_idx}", str(primary_audio_bit_rate)])
+
+    # Tag the clean track so reprocessing can skip the file by default.
+    cmd.extend([f"-metadata:s:a:{clean_idx}", f"title={CLEAN_TRACK_TITLE}"])
+    cmd.extend(["-metadata", "profanity_remover=1"])
+
+    # Jellyfin-friendly defaulting: mark clean as default for MKV mute outputs.
+    if preserve_all_streams and config.mode == "mute":
+        cmd.extend([f"-disposition:a:{clean_idx}", "default", "-disposition:a:0", "0"])
     cmd.append(str(output_video))
     return cmd
 
@@ -280,10 +422,11 @@ def apply_audio_filters_and_mux(
 
     codec_name: Optional[str]
     bit_rate: Optional[int]
+    audio_stream_count: int
     if spans:
-        codec_name, bit_rate = probe_primary_audio_codec_and_bitrate(input_video)
+        codec_name, bit_rate, audio_stream_count = probe_primary_audio_codec_bitrate_and_count(input_video)
     else:
-        codec_name, bit_rate = None, None
+        codec_name, bit_rate, audio_stream_count = None, None, 0
     cmd = _build_ffmpeg_censor_and_mux_cmd(
         input_video=input_video,
         output_video=output_video,
@@ -291,6 +434,7 @@ def apply_audio_filters_and_mux(
         config=config,
         primary_audio_codec=codec_name,
         primary_audio_bit_rate=bit_rate,
+        input_audio_stream_count=audio_stream_count,
     )
 
     logger.info("Running ffmpeg for final mux: %s", " ".join(cmd))

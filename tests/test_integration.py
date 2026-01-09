@@ -248,3 +248,31 @@ def test_full_pipeline_bleep_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
     log_entries = json.loads(censor_log_path.read_text(encoding="utf-8"))
     assert any(entry.get("word") == "fuck" for entry in log_entries)
+
+
+def test_pipeline_skips_when_clean_marker_present(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    input_video = tmp_path / "input.mp4"
+    output_video = tmp_path / "safe.mp4"
+    input_video.write_bytes(b"dummy-video-content")
+
+    # Pretend the input already has a clean audio track marker.
+    monkeypatch.setattr(main_mod, "input_has_clean_track_marker", lambda _p: True)
+
+    # If the pipeline is not skipped, these would be called.
+    def fail_extract(*_args, **_kwargs):  # noqa: ANN001
+        raise AssertionError("extract_mono_pcm_audio should not be called when skipping")
+
+    monkeypatch.setattr(main_mod, "extract_mono_pcm_audio", fail_extract)
+
+    argv = [
+        "--input",
+        str(input_video),
+        "--output",
+        str(output_video),
+        "--output-dir",
+        str(tmp_path / "out"),
+    ]
+
+    exit_code = main_mod.main(argv)
+    assert exit_code == 0
+    assert not output_video.exists()

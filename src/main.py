@@ -21,7 +21,7 @@ from .transcriber import (
     save_transcript_json,
     transcribe_audio_chunks,
 )
-from .video_tools import apply_audio_filters_and_mux
+from .video_tools import apply_audio_filters_and_mux, input_has_clean_track_marker
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
 
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=None,
+        help=(
+            "Force processing even if the input already contains a 'Clean' audio track marker. "
+            "Without --force, inputs that appear already processed are skipped to prevent clean-track accumulation."
+        ),
+    )
+
     return parser.parse_args(argv)
 
 
@@ -143,6 +153,15 @@ def run_pipeline(config: AppConfig) -> None:
     Execute the full profanity-stripping pipeline end-to-end.
     """
     config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prevent re-processing an already-cleaned output (which would otherwise accumulate extra
+    # "Clean" tracks over repeated runs).
+    if not getattr(config, "force", False) and input_has_clean_track_marker(config.input_path):
+        logger.info(
+            "Input already appears to contain a clean-track marker; skipping processing. "
+            "Use --force (or FORCE=true) to override."
+        )
+        return
 
     transcript_json_path = config.output_dir / "transcript.json"
     censor_log_path = config.output_dir / "censor_log.json"

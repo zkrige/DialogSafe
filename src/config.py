@@ -44,6 +44,10 @@ class AppConfig:
     # Debugging / inspection flags
     debug_dump_audio: bool = False  # when True, copy audio.wav and chunk WAVs into output_dir/audio_debug
 
+    # Pipeline control
+    # When True, bypass "already-clean" detection and force processing.
+    force: bool = False
+
     # Derived / loaded values
     profanity_terms: List[str] = field(default_factory=list)
 
@@ -255,6 +259,12 @@ def load_config_from_args(args) -> AppConfig:
         False,
     )
 
+    force = _coalesce(
+        getattr(args, "force", None),
+        _env_bool("FORCE"),
+        False,
+    )
+
     whisper_model = _coalesce(
         getattr(args, "whisper_model", None),
         _env_get("WHISPER_MODEL"),
@@ -337,6 +347,7 @@ def load_config_from_args(args) -> AppConfig:
         emit_subtitles=bool(emit_subtitles),
         verbose=bool(verbose),
         debug_dump_audio=bool(debug_dump_audio),
+        force=bool(force),
         profanity_terms=profanity_terms,
         whisper_backend=whisper_backend,
         whisper_model=str(whisper_model).strip(),
